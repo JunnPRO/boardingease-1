@@ -1,17 +1,9 @@
 import { listings } from "./data.js";
 
 let newListings = listings;
-let selectedListing = null;
-let occupants = 1;
+let currentListing = null;
+let currentOccupants = 1;
 let includeTransport = true;
-
-const SCHOOL_DAYS_PER_MONTH = 22;
-
-const peso = new Intl.NumberFormat("en-PH", {
-  style: "currency",
-  currency: "PHP",
-  maximumFractionDigits: 0,
-});
 
 const resultsList = document.querySelector(".results__list");
 const detailsContainer = document.querySelector(".detail");
@@ -21,51 +13,7 @@ const maxRentInput = document.querySelector("#max-rent");
 const searchForm = document.querySelector("#search-form");
 
 /* ---------------------------------------------------------------
-   COST CALCULATION
-   Formula:
-   rent      = monthlyRent ÷ occupants
-   utilities = 0 if utilitiesIncluded
-               else (electricity + water + internet) ÷ occupants
-   transport = fareOneWay × 2 × 22
-   total     = rent + utilities + transport
-   --------------------------------------------------------------- */
-
-const sumUtilities = ({ electricity = 0, water = 0, internet = 0 } = {}) =>
-  electricity + water + internet;
-
-const calculateCostPerHead = (listing, people, withTransport) => {
-  if (!Number.isInteger(people) || people < 1) {
-    throw new Error("Number of occupants must be a whole number, at least 1.");
-  }
-
-  if (people > listing.maxOccupants) {
-    throw new Error(
-      `This listing allows at most ${listing.maxOccupants} occupants.`,
-    );
-  }
-
-  const rentPerHead = listing.monthlyRent / people;
-
-  const utilitiesPerHead = listing.utilitiesIncluded
-    ? 0
-    : sumUtilities(listing.estimatedUtilities) / people;
-
-  // Transport does NOT divide. Sharing a room does not make the jeepney
-  // cheaper -- everyone pays their own fare, both ways, every school day.
-  const transportPerHead = withTransport
-    ? listing.fareOneWay * 2 * SCHOOL_DAYS_PER_MONTH
-    : 0;
-
-  return {
-    rentPerHead,
-    utilitiesPerHead,
-    transportPerHead,
-    totalPerHead: rentPerHead + utilitiesPerHead + transportPerHead,
-  };
-};
-
-/* ---------------------------------------------------------------
-   MARKUP GENERATION
+   MARKUP GENERATORS
    --------------------------------------------------------------- */
 
 const markupGenerator = (listing) => {
@@ -80,7 +28,7 @@ const markupGenerator = (listing) => {
   } = listing;
 
   const utilitiesTag = utilitiesIncluded
-    ? `<span class="tag">Utilities included</span>`
+    ? `<span class="tag tag--utilities">Utilities included</span>`
     : `<span class="tag tag--utilities">Utilities extra</span>`;
 
   return `<li>
@@ -88,7 +36,7 @@ const markupGenerator = (listing) => {
                 class="card"
                 type="button"
                 data-id="${id}"
-                aria-pressed="${selectedListing && id === selectedListing.id}"
+                aria-pressed="${currentListing && id === currentListing.id}"
               >
                 <img
                   class="card__image"
@@ -103,7 +51,7 @@ const markupGenerator = (listing) => {
                   <span class="card__meta"
                     >${barangay} &middot; ${distanceToCampusKm} km from campus &middot; up to ${maxOccupants}</span
                   >
-                  <span class="card__rent">${peso.format(monthlyRent)} / month</span>
+                  <span class="card__rent">&#8369;${monthlyRent.toLocaleString()} / month</span>
                   <span class="tags">${utilitiesTag}</span>
                 </span>
               </button>
@@ -125,36 +73,63 @@ const results = () => {
   resultsList.innerHTML = newListings.map(markupGenerator).join("");
 };
 
-const breakdownMarkup = (listing) => {
-  try {
-    const { rentPerHead, utilitiesPerHead, transportPerHead, totalPerHead } =
-      calculateCostPerHead(listing, occupants, includeTransport);
+const detailMarkUpGenerator = (listing, occupants, withTransport) => {
+  const {
+    name,
+    barangay,
+    monthlyRent,
+    maxOccupants,
+    utilitiesIncluded,
+    estimatedUtilities,
+    fareOneWay,
+  } = listing;
 
-    return `
+  // Formula calculations
+  let breakdownContent = "";
+
+  if (occupants > maxOccupants) {
+    breakdownContent = `<p class="error">This listing allows at most ${maxOccupants} occupants.</p>`;
+  } else if (!occupants || occupants < 1) {
+    breakdownContent = `<p class="error">Please enter at least 1 occupant.</p>`;
+  } else {
+    // rent = monthlyRent ÷ occupants
+    const rent = Math.round(monthlyRent / occupants);
+
+    // utilities = 0 if utilitiesIncluded else (electricity + water + internet) ÷ occupants
+    const totalUtilities =
+      (estimatedUtilities?.electricity || 0) +
+      (estimatedUtilities?.water || 0) +
+      (estimatedUtilities?.internet || 0);
+
+    const utilities = utilitiesIncluded
+      ? 0
+      : Math.round(totalUtilities / occupants);
+
+    // transport = fareOneWay × 2 × 22 (round trip × 22 school days)
+    const transport = withTransport ? fareOneWay * 2 * 22 : 0;
+
+    // total = rent + utilities + transport
+    const total = rent + utilities + transport;
+
+    breakdownContent = `
       <p class="breakdown__line">
-        <span>Rent</span><span>${peso.format(rentPerHead)}</span>
+        <span>Rent</span><span>&#8369;${rent.toLocaleString()}</span>
       </p>
       <p class="breakdown__line">
-        <span>Utilities</span><span>${peso.format(utilitiesPerHead)}</span>
+        <span>Utilities</span><span>&#8369;${utilities.toLocaleString()}</span>
       </p>
       <p class="breakdown__line">
-        <span>Transport</span><span>${peso.format(transportPerHead)}</span>
+        <span>Transport</span><span>&#8369;${transport.toLocaleString()}</span>
       </p>
       <p class="breakdown__total">
-        <span>Per person</span><span>${peso.format(totalPerHead)}</span>
+        <span>Per person</span><span>&#8369;${total.toLocaleString()}</span>
       </p>
     `;
-  } catch (err) {
-    return `<p class="error">${err.message}</p>`;
   }
-};
-
-const detailMarkUpGenerator = (listing) => {
-  const { name, barangay, monthlyRent, maxOccupants } = listing;
 
   return `
     <h2 class="detail__name">${name}</h2>
-    <p class="detail__where">${barangay} &middot; ${peso.format(monthlyRent)} / month</p>
+    <p class="detail__where">${barangay} &middot; &#8369;${monthlyRent.toLocaleString()} / month</p>
     <fieldset class="splitter">
       <legend class="splitter__legend">Split the cost</legend>
 
@@ -175,61 +150,70 @@ const detailMarkUpGenerator = (listing) => {
         <input
           type="checkbox"
           id="transport-demo"
-          ${includeTransport ? "checked" : ""}
+          ${withTransport ? "checked" : ""}
         />
       </div>
     </fieldset>
 
     <div class="breakdown">
-      ${breakdownMarkup(listing)}
+      ${breakdownContent}
     </div>        
   `;
-};
-
-const renderDetail = () => {
-  if (!selectedListing) {
-    detailsContainer.innerHTML = `<p class="detail__empty">Select a listing to see the cost breakdown.</p>`;
-    return;
-  }
-
-  detailsContainer.innerHTML = detailMarkUpGenerator(selectedListing);
 };
 
 /* ---------------------------------------------------------------
    EVENT LISTENERS
    --------------------------------------------------------------- */
 
+// Click on listing card
 resultsList.addEventListener("click", (event) => {
   const card = event.target.closest(".card");
-
   if (!card) return;
 
   const listingID = card.dataset.id;
+  currentListing = newListings.find((listing) => listingID === listing.id);
+  if (!currentListing) return;
 
-  selectedListing = newListings.find((listing) => listingID === listing.id);
-  if (!selectedListing) return;
-
-  occupants = selectedListing.maxOccupants;
+  // Default to maxOccupants when card is opened
+  currentOccupants = currentListing.maxOccupants;
   includeTransport = true;
 
   results();
-  renderDetail();
+  detailsContainer.innerHTML = detailMarkUpGenerator(
+    currentListing,
+    currentOccupants,
+    includeTransport
+  );
 });
 
 // Event delegation on detailsContainer:
-// The splitter input and checkbox are created dynamically when a card is selected.
-// Listening on detailsContainer handles input changes whenever the user adjusts "Sharing with" or daily fare.
+// Listens for input changes on "Sharing with" and "Include daily fare"
 detailsContainer.addEventListener("input", (event) => {
+  if (!currentListing) return;
+
   if (event.target.id === "occupants-demo") {
-    occupants = Number(event.target.value);
-    renderDetail();
+    // .value is a string, cast to Number
+    currentOccupants = Number(event.target.value);
+    detailsContainer.innerHTML = detailMarkUpGenerator(
+      currentListing,
+      currentOccupants,
+      includeTransport
+    );
   }
 
   if (event.target.id === "transport-demo") {
     includeTransport = event.target.checked;
-    renderDetail();
+    detailsContainer.innerHTML = detailMarkUpGenerator(
+      currentListing,
+      currentOccupants,
+      includeTransport
+    );
   }
 });
+
+/* ---------------------------------------------------------------
+   SEARCH & FILTER
+   --------------------------------------------------------------- */
 
 const applyFilters = () => {
   const query = fieldInput.value.toLowerCase().trim();
@@ -256,9 +240,8 @@ searchForm.addEventListener("submit", (e) => {
 });
 
 /* ---------------------------------------------------------------
-   START
+   INITIALIZE
    --------------------------------------------------------------- */
 
 applyFilters();
 results();
-renderDetail();
