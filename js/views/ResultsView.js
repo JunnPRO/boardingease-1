@@ -53,6 +53,20 @@ class ResultsView extends View {
   _generateMarkup = () => {
     return this._data.map((listing) => this._generateMarkupCard(listing)).join("");
   };
+
+  addSelectHandler(handler) {
+    this._parentElement.addEventListener("click", (e) => {
+      const card = e.target.closest(".card");
+      if (!card) return;
+      handler(card.dataset.id);
+    });
+  }
+
+  markSelected(id) {
+    this._parentElement.querySelectorAll(".card").forEach((card) => {
+      card.setAttribute("aria-pressed", String(card.dataset.id === id));
+    });
+  }
 }
 
 export default new ResultsView();

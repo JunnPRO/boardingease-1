@@ -1,29 +1,69 @@
 import * as model from "./model.js";
 import searchView from "./views/SearchView.js";
 import resultsView from "./views/ResultsView.js";
+import detailView from "./views/DetailView.js";
+
+const detailData = () => {
+  const listing = model.getSelectedListing();
+  const { occupants, includeTransport } = model.state;
+
+  try {
+    const costs = model.calculateCostPerHead(
+      listing,
+      occupants,
+      includeTransport,
+    );
+    return { listing, occupants, includeTransport, costs };
+  } catch (err) {
+    return { listing, occupants, includeTransport, error: err.message };
+  }
+};
 
 // CONTROLLERS
 
 const resultsController = () => {
-  // TODO 2: update the count, render the filtered listings,
-  //         then re-mark the selected card
+  searchView.renderCount(model.state.filtered.length);
+  resultsView.render(model.state.filtered);
+  resultsView.markSelected(model.state.selectedId);
 };
 
 const selectController = (id) => {
-  // TODO 3: save selectedId, find the listing (guard!),
-  //         set occupants, mark the card, render the detail
+  model.setSelected(id);
+  if (!model.getSelectedListing()) return;
+
+  resultsView.markSelected(id);
+  detailView.render(detailData());
 };
 
 const searchController = (term) => {
   model.setSearchTerm(term);
-  // TODO 4: call the right controller
+  resultsController();
 };
 
 const maxRentController = (value) => {
   model.setMaxRent(value);
-  // TODO 4
+  resultsController();
+};
+
+const occupantsController = (n) => {
+  model.setOccupants(n);
+  detailView.updateBreakdown(detailData());
+};
+
+const transportController = (on) => {
+  model.setTransport(on);
+  detailView.updateBreakdown(detailData());
 };
 
 const init = () => {
-  // TODO 5: subscribe every handler, then do the first render
+  searchView.addSearchHandler(searchController);
+  searchView.addMaxRentHandler(maxRentController);
+  searchView.addFormHandler();
+  resultsView.addSelectHandler(selectController);
+  detailView.addOccupantsHandler(occupantsController);
+  detailView.addTransportHandler(transportController);
+
+  resultsController();
 };
+
+init();

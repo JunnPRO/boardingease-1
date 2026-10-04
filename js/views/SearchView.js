@@ -24,7 +24,20 @@ class SearchView {
     this._countEl.textContent = `${count} listing${count === 1 ? "" : "s"}`;
   }
 
-  
+  addSelectHandler(handler) {
+    this._parentElement.addEventListener("click", (e) => {
+      const card = e.target.closest(".card");
+      if (!card) return;
+      const id = card.dataset.id;
+      handler(id);
+    });
+  }
+
+  markSelected(id) {
+    const cards = this._parentElement.querySelectorAll(".card").forEach((card) => {
+      card.setAttribute("aria-pressed", string(card.dataset.id === id));
+    });
+  }
 }
 
 export default new SearchView();
